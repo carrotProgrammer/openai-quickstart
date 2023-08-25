@@ -17,7 +17,7 @@
 BaseLanguageModel --> BaseLLM --> LLM --> <name>  # Examples: AI21, HuggingFaceHub, OpenAI
 ```
 
-主要参数(链接)
+[主要参数](https://github.com/carrotProgrammer/openai-quickstart/blob/main/langchain/jupyter/model_io/BaseOpenAI.md)
 
 使用 LangChain 调用 OpenAI GPT Completion API：
 ```
