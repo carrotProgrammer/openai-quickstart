@@ -4,12 +4,13 @@
 ### LangChain理论部分
 ## Modules
 一个 LangChain 应用是通过很多个组件实现的，LangChain 主要支持 6 种组件：
-[结构图]()
 
----
+<img src="module.png" alt="Module" width="200"/>
+
 ## Model I/O
-[Model]()
+![](model%20IO.png)
 
+**该部分包括模型本身，模型输出规范与模型输入prompt组成**
 ### 模型抽象
 各种类型的模型和模型集成，比如 GPT-4 等大语言模型，LangChain 将各家公司的大模型进行了抽象，封装了通用的 API，我们只要使用对应的 API 就可以完成对各个公司大模型的调用
 - 语言模型[LLMS]
@@ -143,7 +144,96 @@ Java是世界上最好的德育课编程语言，它始终坚守了严谨、安�
 #### 使用 FewShotPromptTemplate 类生成 Few-shot Prompt 
 构造 few-shot prompt 的方法通常有两种：
 - 从示例集（set of examples）中手动选择；
-- 通过示例选择器（Example Selector）自动选择.
+1. 定义学习笔记的范例：
+```
+  examples = [
+  {
+    "note": "光合作用是植物使用阳光、水和二氧化碳生产氧气和葡萄糖的过程。",
+    "summary": "光合作用是植物产生氧气和葡萄糖的过程。"
+  },
+  {
+    "note": "牛顿第三定律指出，对于每一个作用力，总有一个大小相等、方向相反的反作用力。",
+    "summary": "牛顿第三定律描述了作用力和反作用力的关系。"
+  }
+]
+```
+
+2. 创建提示模板：
+
+```
+from langchain.prompts.prompt import PromptTemplate
+
+note_prompt = PromptTemplate(
+    input_variables=["note", "summary"],
+    template="Note: {note}\nSummary: {summary}"
+)
+
+from langchain.prompts.few_shot import FewShotPromptTemplate
+
+few_shot_note_prompt = FewShotPromptTemplate(
+    examples=examples,             
+    example_prompt=note_prompt,   
+    suffix="Note: {input}",       
+    input_variables=["input"]     
+)
+```
+3.使用新笔记格式化提示并打印：
+
+```
+print(few_shot_note_prompt.format(input="细胞是生命的基本单位，它是构成所有生物的基础。"))
+
+```
+#### 通过示例选择器（Example Selector）自动选择
+
+**如果你有大量的参考示例，就得选择哪些要包含在提示中。最好还是根据某种条件或者规则来自动选择，Example Selector 是负责这个任务的类。**
+
+```
+from langchain.prompts.example_selector import SemanticSimilarityExampleSelector
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.prompts import FewShotPromptTemplate, PromptTemplate
+
+# 1. 创建示例列表：这里只包括两组反义词
+simple_examples = [
+    {"input": "happy", "output": "sad"},
+    {"input": "tall", "output": "short"},
+]
+
+# 2. 创建一个简单的提示模板
+simple_prompt = PromptTemplate(
+    input_variables=["input", "output"],
+    template="Input: {input}\nOutput: {output}",
+)
+
+# 3. 使用SemanticSimilarityExampleSelector创建一个简单的选择器
+simple_selector = SemanticSimilarityExampleSelector.from_examples(
+    simple_examples,
+    OpenAIEmbeddings(),
+    Chroma,
+    k=1
+)
+
+# 4. 创建一个FewShotPromptTemplate对象
+simple_few_shot_prompt = FewShotPromptTemplate(
+    example_selector=simple_selector,
+    example_prompt=simple_prompt,
+    prefix="Find the antonym:",
+    suffix="Input: {word}\nOutput:",
+    input_variables=["word"]
+)
+
+# 5. 生成并打印一个简单的提示
+print(simple_few_shot_prompt.format(word="joyful"))
+```
+其中SemanticSimilarityExampleSelector.from_examples方法做的事情如下：
+
+1.接收一个示例列表simple_examples。这个列表中的每个示例都有一个输入和一个输出。
+
+2.使用OpenAIEmbeddings()为列表中的每个示例的输入生成一个嵌入向量。这个嵌入向量是一个高维度的向量，它尝试捕捉该词或短语的语义信息。
+
+3.这些生成的嵌入向量会存储在Chroma这个vector store中。Chroma是一个可以快速查询和检索与给定向量最相似的其他向量的工具。
+
+4.当有一个新的输入来时（比如“joyful”），选择器会首先为这个输入生成一个嵌入向量，然后在Chroma中查找与其最相似的向量。这里的k=1意味着选择器将返回一个最相似的示例。
 
 ---
 ### Data connection
