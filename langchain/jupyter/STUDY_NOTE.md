@@ -307,16 +307,16 @@ Out：2008-10-31 00:00:00
 
 ---
 
-### Chains
+## Chains
 **复杂的大模型应用需要将 `LLMs` 和 `Chat Models` 链接在一起 - 要么彼此链接，要么与其他组件链接。**
 
-#### Chain Class 基类
+### Chain Class 基类
 类继承关系：
 
 ```
 Chain --> <name>Chain  # Examples: LLMChain, MapReduceChain, RouterChain
 ```
-#### LLMChain
+### LLMChain
 LLMChain 是 LangChain 中最简单的链，作为其他复杂 Chains 和 Agents 的内部调用，被广泛应用。
 
 一个LLMChain由PromptTemplate和语言模型（LLM or Chat Model）组成。
@@ -337,7 +337,7 @@ print(chain.run({
     }))
 ```
 
-#### Sequential Chain
+### Sequential Chain
 串联式调用语言模型（将一个调用的输出作为另一个调用的输入）。
 
 顺序链（Sequential Chain ）允许用户连接多个链并将它们组合成执行特定场景的流水线（Pipeline）。有两种类型的顺序链：
@@ -345,10 +345,55 @@ print(chain.run({
 - SimpleSequentialChain：最简单形式的顺序链，每个步骤都具有单一输入/输出，并且一个步骤的输出是下一个步骤的输入。
 - SequentialChain：更通用形式的顺序链，允许多个输入/输出。
 
+![](d48904935a0195c49597c1dd9fa2d4f.png)
 
+![](ac9e72a0e6e194e7f0c9d413c98c23e.png)
+
+### Transform Chain
+![](f65455d341c0c310ca49bb4a9851203.png)
+
+```
+# 定义一个转换函数，输入是一个字典，输出也是一个字典。
+def transform_func(inputs: dict) -> dict:
+    # 从输入字典中获取"text"键对应的文本。
+    text = inputs["text"]
+    # 使用split方法将文本按照"\n\n"分隔为多个段落，并只取前三个，然后再使用"\n\n"将其连接起来。
+    shortened_text = "\n\n".join(text.split("\n\n")[:3])
+    # 返回裁剪后的文本，用"output_text"作为键。
+    return {"output_text": shortened_text}
+
+# 使用上述转换函数创建一个TransformChain对象。
+# 定义输入变量为["text"]，输出变量为["output_text"]，并指定转换函数为transform_func。
+transform_chain = TransformChain(
+    input_variables=["text"], output_variables=["output_text"], transform=transform_func
+)
+```
+字典"text"和"ouput_text"分别代表处理前和处理后的文本。这个操作中并没有调用大模型，只是执行了定义的函数
+
+### Router Chain
+实现条件判断的大模型调用
+
+---
+
+## Memory
+大多数LLM应用都具有对话界面。对话的一个重要组成部分是能够引用先前在对话中介绍过的信息。至少，一个对话系统应该能够直接访问一些过去消息的窗口。更复杂的系统将需要拥有一个不断更新的世界模型，使其能够保持关于实体及其关系的信息。
+
+我们将存储过去交互信息的能力称为“记忆（Memory）”。
+
+LangChain提供了许多用于向应用/系统中添加 Memory 的实用工具。这些工具可以单独使用，也可以无缝地集成到链中。
+
+一个记忆系统（Memory System）需要支持两个基本操作：**读取（READ）和写入（WRITE）**。
+
+每个链都定义了一些核心执行逻辑，并期望某些输入。其中一些输入直接来自用户，但有些输入可能来自 Memory。
+
+在一个典型 Chain 的单次运行中，将与其 Memory System 进行至少两次交互:
+
+1. 在接收到初始用户输入之后，在执行核心逻辑之前，链将从其 Memory 中**读取**并扩充用户输入。
+2. 在执行核心逻辑之后但在返回答案之前，一个链条将把当前运行的输入和输出**写入** Memory ，以便在未来的运行中可以引用它们。
+![](memory.png)
 ### Data connection
 
 
-### Memory
+
 ### Agents
 ### Callbacks
