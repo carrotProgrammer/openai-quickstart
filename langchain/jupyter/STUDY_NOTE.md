@@ -307,9 +307,48 @@ Out：2008-10-31 00:00:00
 
 ---
 
+### Chains
+**复杂的大模型应用需要将 `LLMs` 和 `Chat Models` 链接在一起 - 要么彼此链接，要么与其他组件链接。**
+
+#### Chain Class 基类
+类继承关系：
+
+```
+Chain --> <name>Chain  # Examples: LLMChain, MapReduceChain, RouterChain
+```
+#### LLMChain
+LLMChain 是 LangChain 中最简单的链，作为其他复杂 Chains 和 Agents 的内部调用，被广泛应用。
+
+一个LLMChain由PromptTemplate和语言模型（LLM or Chat Model）组成。
+```
+from langchain.llms import OpenAI
+from langchain.prompts import PromptTemplate
+
+llm = OpenAI(temperature=0.9, max_tokens=500)
+prompt = PromptTemplate(
+    input_variables=["product"],
+    template="给制造{product}的有限公司取10个好名字，并给出完整的公司名称",
+)
+from langchain.chains import LLMChain
+
+chain = LLMChain(llm=llm, prompt=prompt)
+print(chain.run({
+    'product': "性能卓越的GPU"
+    }))
+```
+
+#### Sequential Chain
+串联式调用语言模型（将一个调用的输出作为另一个调用的输入）。
+
+顺序链（Sequential Chain ）允许用户连接多个链并将它们组合成执行特定场景的流水线（Pipeline）。有两种类型的顺序链：
+
+- SimpleSequentialChain：最简单形式的顺序链，每个步骤都具有单一输入/输出，并且一个步骤的输出是下一个步骤的输入。
+- SequentialChain：更通用形式的顺序链，允许多个输入/输出。
+
+
 ### Data connection
 
-### Chains
+
 ### Memory
 ### Agents
 ### Callbacks
