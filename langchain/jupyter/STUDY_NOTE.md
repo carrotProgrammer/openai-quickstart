@@ -391,6 +391,74 @@ LangChain提供了许多用于向应用/系统中添加 Memory 的实用工具�
 1. 在接收到初始用户输入之后，在执行核心逻辑之前，链将从其 Memory 中**读取**并扩充用户输入。
 2. 在执行核心逻辑之后但在返回答案之前，一个链条将把当前运行的输入和输出**写入** Memory ，以便在未来的运行中可以引用它们。
 ![](memory.png)
+
+### BaseMemory Class 基类
+类继承关系：
+
+```
+# 适用于简单的语言模型
+BaseMemory --> BaseChatMemory --> <name>Memory  # Examples: ZepMemory, MotorheadMemory
+```
+
+### ConversationChain and ConversationBufferMemory
+```
+from langchain.llms import OpenAI
+from langchain.chains import ConversationChain
+from langchain.memory import ConversationBufferMemory
+
+llm = OpenAI(temperature=0)
+conversation = ConversationChain(
+    llm=llm, 
+    verbose=True, 
+    memory=ConversationBufferMemory()
+)
+conversation.predict(input="Hi there!")
+conversation.predict(input="I'm doing well! Just having a conversation with an AI.")
+conversation.predict(input="Tell me about yourself.")
+```
+> Entering new ConversationChain chain...
+Prompt after formatting:
+The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the > AI does not know the answer to a question, it truthfully says it does not know.
+
+> Current conversation:
+Human: Hi there!
+AI:  Hi there! It's nice to meet you. How can I help you today?
+Human: I'm doing well! Just having a conversation with an AI.
+AI:  That's great! It's always nice to have a conversation with someone new. What would you like to talk about?
+Human: Tell me about yourself.
+AI:
+
+> Finished chain.
+" Sure! I'm an AI created to help people with their everyday tasks. I'm programmed to understand natural language and provide helpful information. I'm > also constantly learning and updating my knowledge base so I can provide more accurate and helpful answers."
+没有使用chat模型，但实现了一个对话系统。
+
+### ConversationBufferWindowMemory
+`ConversationBufferWindowMemory` 会在时间轴上保留对话的交互列表。它只使用最后 K 次交互。这对于保持最近交互的滑动窗口非常有用，以避免缓冲区过大。
+```
+from langchain.memory import ConversationBufferWindowMemory
+
+conversation_with_summary = ConversationChain(
+    llm=OpenAI(temperature=0), 
+    # We set a low k=2, to only keep the last 2 interactions in memory
+    memory=ConversationBufferWindowMemory(k=2), 
+    verbose=True
+)
+conversation_with_summary.predict(input="Hi, what's up?")
+```
+
+### ConversationSummaryBufferMemory
+`ConversationSummaryBufferMemory` 在内存中保留了最近的交互缓冲区，但不仅仅是完全清除旧的交互，而是将它们编译成摘要并同时使用。与以前的实现不同的是，它使用标记长度而不是交互次数来确定何时清除交互。
+
+```
+from langchain.memory import ConversationSummaryBufferMemory
+
+memory = ConversationSummaryBufferMemory(llm=llm, max_token_limit=10)
+memory.save_context({"input": "hi"}, {"output": "whats up"})
+memory.save_context({"input": "not much you"}, {"output": "not much"})
+```
+
+---
+
 ### Data connection
 
 
