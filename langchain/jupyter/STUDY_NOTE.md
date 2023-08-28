@@ -416,21 +416,27 @@ conversation.predict(input="Hi there!")
 conversation.predict(input="I'm doing well! Just having a conversation with an AI.")
 conversation.predict(input="Tell me about yourself.")
 ```
-> Entering new ConversationChain chain...
+Entering new ConversationChain chain...
 Prompt after formatting:
-The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the > AI does not know the answer to a question, it truthfully says it does not know.
+The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
+Current conversation:
 
-> Current conversation:
-Human: Hi there!
-AI:  Hi there! It's nice to meet you. How can I help you today?
-Human: I'm doing well! Just having a conversation with an AI.
-AI:  That's great! It's always nice to have a conversation with someone new. What would you like to talk about?
-Human: Tell me about yourself.
-AI:
+> Human: Hi there!
 
-> Finished chain.
-" Sure! I'm an AI created to help people with their everyday tasks. I'm programmed to understand natural language and provide helpful information. I'm > also constantly learning and updating my knowledge base so I can provide more accurate and helpful answers."
-没有使用chat模型，但实现了一个对话系统。
+> AI:  Hi there! It's nice to meet you. How can I help you today?
+
+> Human: I'm doing well! Just having a conversation with an AI.
+
+> AI:  That's great! It's always nice to have a conversation with someone new. What would you like to talk about?
+
+> Human: Tell me about yourself.
+
+> AI:
+Finished chain.
+
+" Sure! I'm an AI created to help people with their everyday tasks. I'm programmed to understand natural language and provide helpful information. I'm also constantly learning and updating my knowledge base so I can provide more accurate and helpful answers."
+
+使用memory可以在没有使用chat模型的情况下，实现一个对话系统。
 
 ### ConversationBufferWindowMemory
 `ConversationBufferWindowMemory` 会在时间轴上保留对话的交互列表。它只使用最后 K 次交互。这对于保持最近交互的滑动窗口非常有用，以避免缓冲区过大。
