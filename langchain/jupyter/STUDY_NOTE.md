@@ -464,10 +464,307 @@ memory.save_context({"input": "not much you"}, {"output": "not much"})
 ```
 
 ---
-还会继续更新...
-### Data connection
 
+## Data connection
+许多LLM应用需要用户特定的数据，这些数据不属于模型的训练集。LangChain通过以下方式为你提供了加载、转换、存储和查询数据的构建模块：
 
+- 文档加载器：从许多不同的来源加载文档
+- 文档转换器：分割文档，删除多余的文档等-
+- 文本嵌入模型：采取非结构化文本，并把它变成一个浮点数的列表 矢量存储：存储和
+- 搜索嵌入式数据
+- 检索器：查询你的数据
+  
+整体流程：
+![](https://python.langchain.com/assets/images/data_connection-c42d68c3d092b85f50d08d4cc171fc25.jpg)
 
-### Agents
-### Callbacks
+### BaseLoader
+`BaseLoader` 类定义了如何从不同的数据源加载文档，并提供了一个可选的方法来分割加载的文档。使用这个类作为基础，开发者可以为特定的数据源创建自定义的加载器，并确保所有这些加载器都提供了加载数据的方法。load_and_split方法还提供了一个额外的功能，可以根据需要将加载的文档分割为更小的块，每个块使用List数据结构存储。load方法是抽象方法。
+
+```python
+# 基础加载器类。
+class BaseLoader(ABC):
+    """基础加载器类定义。"""
+
+    # 抽象方法，所有子类必须实现此方法。
+    @abstractmethod
+    def load(self) -> List[Document]:
+        """加载数据并将其转换为文档对象。"""
+
+    # 该方法可以加载文档，并将其分割为更小的块。
+    def load_and_split(
+        self, text_splitter: Optional[TextSplitter] = None
+    ) -> List[Document]:
+        """加载文档并分割成块。"""
+        # 如果没有提供特定的文本分割器，使用默认的字符文本分割器。
+        if text_splitter is None:
+            _text_splitter: TextSplitter = RecursiveCharacterTextSplitter()
+        else:
+            _text_splitter = text_splitter
+        # 先加载文档。
+        docs = self.load()
+        # 然后使用_text_splitter来分割每一个文档。
+        return _text_splitter.split_documents(docs)
+```
+其子类有TextLoader用于加载Txt文件，ArxivLoader用于加载ArXiv论文，UnstructuredURLLoader用于加载网页内容等等。更多查看langchain文档：(https://github.com/langchain-ai/langchain/tree/master/libs/langchain/langchain/document_loaders)
+
+### Document Transformers
+一旦加载了文档，通常会希望对其进行转换以更好地适应您的应用程序。
+最简单的例子是，您可能希望将长文档拆分为较小的块，以适应模型的上下文窗口。LangChain具有许多内置的文档转换器，可以轻松地拆分、合并、过滤和其他操作文档。
+
+#### Document类
+大部分通过loader加载后的内容，都将存储为`Document`对象，`Document`的类，允许用户与文档的内容进行交互，可以查看文档的段落、摘要，以及使用查找功能来查询文档中的特定字符串。
+
+```python
+# 基于BaseModel定义的文档类。
+class Document(BaseModel):
+    """接口，用于与文档进行交互。"""
+
+    # 文档的主要内容。
+    page_content: str
+    # 用于查找的字符串。
+    lookup_str: str = ""
+    # 查找的索引，初次默认为0。
+    lookup_index = 0
+    # 用于存储任何与文档相关的元数据。
+    metadata: dict = Field(default_factory=dict)
+
+    @property
+    def paragraphs(self) -> List[str]:
+        """页面的段落列表。"""
+        # 使用"\n\n"将内容分割为多个段落。
+        return self.page_content.split("\n\n")
+
+    @property
+    def summary(self) -> str:
+        """页面的摘要（即第一段）。"""
+        # 返回第一个段落作为摘要。
+        return self.paragraphs[0]
+
+    # 这个方法模仿命令行中的查找功能。
+    def lookup(self, string: str) -> str:
+        """在页面中查找一个词，模仿cmd-F功能。"""
+        # 如果输入的字符串与当前的查找字符串不同，则重置查找字符串和索引。
+        if string.lower() != self.lookup_str:
+            self.lookup_str = string.lower()
+            self.lookup_index = 0
+        else:
+            # 如果输入的字符串与当前的查找字符串相同，则查找索引加1。
+            self.lookup_index += 1
+        # 找出所有包含查找字符串的段落。
+        lookups = [p for p in self.paragraphs if self.lookup_str in p.lower()]
+        # 根据查找结果返回相应的信息。
+        if len(lookups) == 0:
+            return "No Results"
+        elif self.lookup_index >= len(lookups):
+            return "No More Results"
+        else:
+            result_prefix = f"(Result {self.lookup_index + 1}/{len(lookups)})"
+            return f"{result_prefix} {lookups[self.lookup_index]}"
+```
+#### Text Splitters 文本分割器
+当你想处理长篇文本时，有必要将文本分成块。为了方便嵌入，理想情况下，你希望将语义相关的文本片段放在一起。"语义相关"的含义可能取决于文本类型。
+
+从高层次上看，文本分割器的工作原理如下：
+
+1. 将文本分成小而有意义的块（通常是句子）。
+2. 开始将这些小块组合成较大的块，直到达到某个大小（通过某个函数进行测量）。
+3. 一旦达到该大小，使该块成为自己独立的一部分，并开始创建一个具有一定重叠（以保持上下文关系）的新文本块。
+
+这意味着您可以沿两个不同轴向定制您的文本分割器：
+
+1. 如何拆分文字
+2. 如何测量块大小
+
+#### 使用 `RecursiveCharacterTextSplitter` 文本分割器
+
+该文本分割器接受一个字符列表作为参数，根据第一个字符进行切块，但如果任何切块太大，则会继续移动到下一个字符，并以此类推。默认情况下，它尝试进行切割的字符包括 `["\n\n", "\n", " ", ""]`
+
+除了控制可以进行切割的字符外，您还可以控制其他一些内容：
+
+- length_function：用于计算切块长度的方法。默认只计算字符数，但通常在这里传递一个令牌计数器。
+- chunk_size：您的切块的最大大小（由长度函数测量）。
+- chunk_overlap：切块之间的最大重叠部分。保持一定程度的重叠可以使得各个切块之间保持连贯性（例如滑动窗口）。
+- add_start_index：是否在元数据中包含每个切块在原始文档中的起始位置。
+
+更多的处理案例可以参考：(https://zhuanlan.zhihu.com/p/640424318)
+
+#### 使用Embedding类
+嵌入的概念不在这具体展开，简单来讲是将高维字符串转换成较低维的向量并保留语义信息。
+
+Embeddings类是一个专门用于与文本嵌入模型进行交互的类。有许多嵌入模型提供者（OpenAI、Cohere、Hugging Face等）-这个类旨在为所有这些提供者提供一个标准接口。
+
+嵌入将一段文本创建成向量表示。这非常有用，因为它意味着我们可以在向量空间中思考文本，并且可以执行语义搜索等操作，在向量空间中寻找最相似的文本片段。
+
+LangChain中基础的Embeddings类公开了两种方法：一种用于对文档进行嵌入，另一种用于对查询进行嵌入。前者输入多个文本，而后者输入单个文本。之所以将它们作为两个独立的方法，是因为某些嵌入提供者针对要搜索的文件和查询（搜索查询本身）具有不同的嵌入方法。
+
+#### Vector Stores
+存储和搜索非结构化数据最常见的方法之一是将其嵌入并存储生成的嵌入向量，然后在查询时将非结构化查询进行嵌入，并检索与嵌入查询“最相似”的嵌入向量。
+
+向量存储库负责为您存储已经过嵌入处理的数据并执行向量搜索。
+
+![](https://python.langchain.com/assets/images/vector_stores-9dc1ecb68c4cb446df110764c9cc07e0.jpg)
+
+下面以Chroma向量数据库为例展示Connection各环节：
+```
+# 安装必要依赖包
+!pip install chromadb
+
+from langchain.document_loaders import TextLoader
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.vectorstores import Chroma
+
+# 加载长文本
+path = "C:\\Users\\lenovo\\openai-quickstart\\langchain\\tests\\state_of_the_union.txt"
+
+raw_documents = TextLoader(path, encoding='utf-8').load()
+
+# 实例化文本分割器
+text_splitter = CharacterTextSplitter(chunk_size=100, chunk_overlap=0)
+# 分割文本
+documents = text_splitter.split_documents(raw_documents)
+
+# 将分割后的文本，使用 OpenAI 嵌入模型获取嵌入向量，并存储在 Chroma 中
+db = Chroma.from_documents(documents, OpenAIEmbeddings())
+
+# 使用文本进行语义相似度搜索
+query = "What did the president say about Ketanji Brown Jackson"
+docs = db.similarity_search(query)
+print(docs[0].page_content)
+
+# 使用嵌入向量进行语义相似度搜索
+# embeddings_model = OpenAIEmbeddings()
+# embedding_vector = embeddings_model.embed_query(query)
+embedding_vector = OpenAIEmbeddings().embed_query(query)
+docs = db.similarity_search_by_vector(embedding_vector)
+print(docs[0].page_content)
+
+```
+
+## Agents
+![](agent.jpg)
+代理主要分为两种：
+
+- 执行代理：在每一步骤需要执行前，使用所有先前执行的输出来决定下一个执行
+- 计划并执行代理：预先决定完整的操作顺序，然后执行所有操作而不更新计划
+
+执行代理适合小型任务，而计划和执行代理更适合需要维护长期目标和焦点的复杂或长期运行的任务。通常，最好的方法是通过让计划和执行代理使用执行代理来执行计划，将执行代理的即时性与计划和执行代理的规划能力结合起来。
+
+代理涉及的其他抽象包括：
+
+- 工具：代理可以采取的操作。为代理提供哪些工具很大程度上取决于您希望代理做什么
+- 工具包：可在特定用例中一起使用的工具集合的包装。例如，为了让代理与 SQL 数据库交互，它可能需要一个工具来执行查询，另一个工具来检查表
+
+文档：(https://python.langchain.com/docs/modules/agents/)
+
+#### ReAct: Reasoning + Acting
+![](ReAct.jpg)
+ReAct是Agents实现的理论基础：
+
+ReAct Prompt 由 few-shot task-solving trajectories 组成，包括人工编写的文本推理过程和动作，以及对动作的环境观察. ReAct Prompt 设计直观灵活，并在各种任务上实现了最先进的少样本性能.
+
+Reason-only baseline （即思维链）由于没有与外部环境接触以获取和更新知识，而且必须依赖有限的内部知识，因此容易受到错误信息的影响。
+
+Act-only baseline 缺乏推理能力方面问题，在这种情况下，尽管具有与ReAct相同的行动和观察，但无法综合得出最终答案。
+
+相比之下，ReAct通过可解释且真实可信的轨迹来解决任务。
+
+#### 代码示例
+ReAct 核心思想是 推理+操作，本示例以` Google Search` 和 `LLM Math` 作为可选操作集合（toolkits），实现 ReAct 功能。
+
+```
+import os
+
+# 更换为自己的 Serp API KEY
+os.environ["SERPAPI_API_KEY"] = "xxx"
+
+# 使用使用completion
+from langchain.llms import OpenAI
+
+llm = OpenAI(temperature=0)
+
+from langchain.agents import load_tools
+from langchain.agents import initialize_agent
+from langchain.agents import AgentType
+
+tools = load_tools(["serpapi", "llm-math"], llm=llm)
+
+agent = initialize_agent(tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
+
+agent.run("谁是莱昂纳多·迪卡普里奥的女朋友？她现在年龄的0.43次方是多少?")
+
+```
+```
+Out:
+> Entering new AgentExecutor chain...
+ I need to find out who Leonardo DiCaprio's girlfriend is and then calculate her age to the 0.43 power.
+Action: Search
+Action Input: "Leonardo DiCaprio girlfriend"
+Observation: Camila Morrone
+Thought: I need to find out Camila Morrone's age
+Action: Search
+Action Input: "Camila Morrone age"
+Observation: 26 years
+Thought: I need to calculate 26 to the 0.43 power
+Action: Calculator
+Action Input: 26^0.43
+Observation: Answer: 4.059182145592686
+Thought: I now know the final answer
+Final Answer: Camila Morrone is Leonardo DiCaprio's girlfriend and her age to the 0.43 power is 4.059182145592686.
+
+> Finished chain.
+"Camila Morrone is Leonardo DiCaprio's girlfriend and her age to the 0.43 power is 4.059182145592686."
+
+```
+
+```
+#使用聊天模型
+from langchain.chat_models import ChatOpenAI
+
+chat_model = ChatOpenAI(model="gpt-4", temperature=0)
+agent = initialize_agent(tools, chat_model, agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
+agent.run("谁是莱昂纳多·迪卡普里奥的女朋友？她现在年龄的0.43次方是多少?")
+
+```
+
+```
+Out:
+
+> Entering new AgentExecutor chain...
+Thought: The question is asking two things: who is Leonardo DiCaprio's girlfriend and what is her age to the power of 0.43. I will first need to find out who Leonardo DiCaprio's girlfriend is and then find out her age. I will use the search tool for this. 
+
+Action:
+
+{
+  "action": "Search",
+  "action_input": "Leonardo DiCaprio's girlfriend"
+}
+
+Observation: https://www.elle.com/uk/fashion/celebrity-style/articles/g24272/leonardo-dicaprio-dating-history/
+Thought:The search results show that Leonardo DiCaprio's current girlfriend is Camila Morrone. Now I need to find out her age. 
+
+Action:
+
+{
+  "action": "Search",
+  "action_input": "Camila Morrone age"
+}
+
+Observation: 26 years
+Thought:Camila Morrone is 26 years old. Now I need to calculate her age to the power of 0.43. I will use the calculator tool for this. 
+
+Action:
+
+{
+  "action": "Calculator",
+  "action_input": "26^0.43"
+}
+
+Observation: Answer: 4.059182145592686
+Thought:I have calculated Camila Morrone's age to the power of 0.43 and the result is approximately 4.06.
+Final Answer: 莱昂纳多·迪卡普里奥的女朋友是Camila Morrone，她现在年龄的0.43次方是4.06。
+
+> Finished chain.
+'莱昂纳多·迪卡普里奥的女朋友是Camila Morrone，她现在年龄的0.43次方是4.06。'
+
+```
