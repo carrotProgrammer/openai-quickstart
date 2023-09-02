@@ -1,7 +1,7 @@
 # LangChain学习笔记
 该笔记分为两个部分，分别是理论部分与应用部分
 
-### LangChain理论部分
+# LangChain理论部分
 ## Modules
 一个 LangChain 应用是通过很多个组件实现的，LangChain 主要支持 6 种组件：
 
@@ -768,3 +768,5 @@ Final Answer: 莱昂纳多·迪卡普里奥的女朋友是Camila Morrone，她�
 '莱昂纳多·迪卡普里奥的女朋友是Camila Morrone，她现在年龄的0.43次方是4.06。'
 
 ```
+
+# LangChain实践部分
