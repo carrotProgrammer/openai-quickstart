@@ -770,3 +770,15 @@ Final Answer: 莱昂纳多·迪卡普里奥的女朋友是Camila Morrone，她�
 ```
 
 # LangChain实践部分
+
+## openAI translator(翻译器实战)
+仓库地址：(https://github.com/carrotProgrammer/OPENAI_TRANSLATOR/blob/master/README.md)
+
+由于langchain统一了大模型API接口与prompt，因此原本的model模块可以省略，将prompt与大模型使用一个LLMChain集成：(https://github.com/carrotProgrammer/OPENAI_TRANSLATOR/blob/master/ai_translator/translator/translation_chain.py)
+
+
+
+## 基于langchain的AutoGPT
+
+        
+    
